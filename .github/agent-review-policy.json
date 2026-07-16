@@ -1,0 +1,12 @@
+{
+  "reviewers": [
+    "cubic-dev-ai[bot]",
+    "chatgpt-codex-connector[bot]",
+    "coderabbitai[bot]"
+  ],
+  "minimum_positive_reviewers": 2,
+  "blocking_thread_severities": ["P0", "P1", "P2"],
+  "required_ci_name_patterns": ["ci", "verify", "test", "build"],
+  "opt_out_label": "no-automerge",
+  "merge_method": "squash"
+}

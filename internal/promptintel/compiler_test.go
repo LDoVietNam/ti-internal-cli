@@ -13,11 +13,11 @@ func TestCompilerPreservesPrecedenceAndProvenance(t *testing.T) {
 		Instructions: docsbot.Instructions{Execution: []string{"Run relevant tests."}},
 	}}}
 	compiled, err := compiler.Compile(CompileRequest{
-		RuntimePolicy: "Never bypass permissions.",
+		RuntimePolicy:       "Never bypass permissions.",
 		ProjectInstructions: "Use go test ./...",
-		Task: "Verify the implementation",
-		Stack: stack,
-		ToolContracts: map[string]string{"test": "worker.execute capability=test"},
+		Task:                "Verify the implementation",
+		Stack:               stack,
+		ToolContracts:       map[string]string{"test": "worker.execute capability=test"},
 	})
 	if err != nil {
 		t.Fatal(err)

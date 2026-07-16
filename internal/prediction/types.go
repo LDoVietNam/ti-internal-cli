@@ -30,31 +30,31 @@ type Request struct {
 }
 
 type Candidate struct {
-	ID                 string
-	WorkflowID         string
-	WorkerID           string
-	ProviderID         string
-	ModelID            string
-	PromptIDs          []string
-	RequiredTools      []string
-	RequiredContext    []string
-	VerificationPlan   []string
-	StopConditions     []string
-	Capabilities       []string
-	TaskTypes          []TaskType
-	Languages          []string
-	Frameworks         []string
-	RepositoryTags     []string
-	PolicyAllowed      bool
-	Enabled            bool
-	Available          bool
-	HistoricalSuccess  float64
+	ID                  string
+	WorkflowID          string
+	WorkerID            string
+	ProviderID          string
+	ModelID             string
+	PromptIDs           []string
+	RequiredTools       []string
+	RequiredContext     []string
+	VerificationPlan    []string
+	StopConditions      []string
+	Capabilities        []string
+	TaskTypes           []TaskType
+	Languages           []string
+	Frameworks          []string
+	RepositoryTags      []string
+	PolicyAllowed       bool
+	Enabled             bool
+	Available           bool
+	HistoricalSuccess   float64
 	VerificationSuccess float64
-	SourceTrust        float64
-	Quality            float64
-	Freshness          float64
-	RiskPenalty        float64
-	RedundancyPenalty  float64
+	SourceTrust         float64
+	Quality             float64
+	Freshness           float64
+	RiskPenalty         float64
+	RedundancyPenalty   float64
 }
 
 type Reason struct {

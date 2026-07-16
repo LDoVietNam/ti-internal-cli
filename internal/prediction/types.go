@@ -18,6 +18,8 @@ var ErrNoEligibleCandidate = errors.New("no eligible prediction candidate")
 type TaskProfile struct {
 	Type           TaskType
 	Intent         []string
+	Domain         string
+	Phase          string
 	Language       string
 	Framework      string
 	RepositoryTags []string
@@ -73,6 +75,14 @@ type PredictionCandidate struct {
 	Score       float64
 }
 
+type SkillPrediction struct {
+	SkillIDs   []string
+	Mode       string
+	Confidence float64
+	Fallback   bool
+	Reasons    []Reason
+}
+
 type Prediction struct {
 	CandidateID      string
 	TaskType         TaskType
@@ -90,6 +100,7 @@ type Prediction struct {
 	Confidence       float64
 	Reasons          []Reason
 	Fallbacks        []PredictionCandidate
+	DocsBotSkills    SkillPrediction
 }
 
 type Weights struct {

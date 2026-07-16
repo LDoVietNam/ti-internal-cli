@@ -5,38 +5,38 @@ import "testing"
 func TestEngineRejectsCandidatesMissingRequiredCapabilities(t *testing.T) {
 	engine := NewEngine(DefaultWeights())
 	request := Request{
-		Task: TaskProfile{Type: TaskBugFix, Language: "go"},
+		Task:                 TaskProfile{Type: TaskBugFix, Language: "go"},
 		RequiredCapabilities: []string{"filesystem.read", "test.run"},
 	}
 	candidates := []Candidate{
 		{
-			ID: "incomplete",
-			WorkflowID: "fix_bug",
-			WorkerID: "worker-a",
-			ProviderID: "provider-a",
-			ModelID: "model-a",
-			Capabilities: []string{"filesystem.read"},
+			ID:            "incomplete",
+			WorkflowID:    "fix_bug",
+			WorkerID:      "worker-a",
+			ProviderID:    "provider-a",
+			ModelID:       "model-a",
+			Capabilities:  []string{"filesystem.read"},
 			PolicyAllowed: true,
-			Enabled: true,
-			Available: true,
+			Enabled:       true,
+			Available:     true,
 		},
 		{
-			ID: "eligible",
-			WorkflowID: "fix_bug",
-			WorkerID: "worker-b",
-			ProviderID: "provider-b",
-			ModelID: "model-b",
-			Capabilities: []string{"filesystem.read", "test.run"},
-			TaskTypes: []TaskType{TaskBugFix},
-			Languages: []string{"go"},
-			PolicyAllowed: true,
-			Enabled: true,
-			Available: true,
-			HistoricalSuccess: 0.8,
+			ID:                  "eligible",
+			WorkflowID:          "fix_bug",
+			WorkerID:            "worker-b",
+			ProviderID:          "provider-b",
+			ModelID:             "model-b",
+			Capabilities:        []string{"filesystem.read", "test.run"},
+			TaskTypes:           []TaskType{TaskBugFix},
+			Languages:           []string{"go"},
+			PolicyAllowed:       true,
+			Enabled:             true,
+			Available:           true,
+			HistoricalSuccess:   0.8,
 			VerificationSuccess: 0.9,
-			SourceTrust: 1,
-			Quality: 0.8,
-			Freshness: 1,
+			SourceTrust:         1,
+			Quality:             0.8,
+			Freshness:           1,
 		},
 	}
 
@@ -56,35 +56,45 @@ func TestEngineRanksCandidatesAndExplainsEveryFactor(t *testing.T) {
 	engine := NewEngine(DefaultWeights())
 	request := Request{
 		Task: TaskProfile{
-			Type: TaskBugFix,
-			Language: "go",
-			Framework: "net/http",
+			Type:           TaskBugFix,
+			Language:       "go",
+			Framework:      "net/http",
 			RepositoryTags: []string{"router", "backend"},
 		},
 		RequiredCapabilities: []string{"filesystem.read"},
 	}
 	candidates := []Candidate{
 		{
-			ID: "generic",
-			WorkflowID: "investigate",
-			Capabilities: []string{"filesystem.read"},
-			TaskTypes: []TaskType{TaskInvestigation},
-			Languages: []string{"python"},
-			PolicyAllowed: true, Enabled: true, Available: true,
-			HistoricalSuccess: 0.5, VerificationSuccess: 0.5,
-			SourceTrust: 0.6, Quality: 0.6, Freshness: 0.8,
+			ID:                  "generic",
+			WorkflowID:          "investigate",
+			Capabilities:        []string{"filesystem.read"},
+			TaskTypes:           []TaskType{TaskInvestigation},
+			Languages:           []string{"python"},
+			PolicyAllowed:       true,
+			Enabled:             true,
+			Available:           true,
+			HistoricalSuccess:   0.5,
+			VerificationSuccess: 0.5,
+			SourceTrust:         0.6,
+			Quality:             0.6,
+			Freshness:           0.8,
 		},
 		{
-			ID: "specialized",
-			WorkflowID: "fix_bug",
-			Capabilities: []string{"filesystem.read"},
-			TaskTypes: []TaskType{TaskBugFix},
-			Languages: []string{"go"},
-			Frameworks: []string{"net/http"},
-			RepositoryTags: []string{"router"},
-			PolicyAllowed: true, Enabled: true, Available: true,
-			HistoricalSuccess: 0.9, VerificationSuccess: 0.9,
-			SourceTrust: 1, Quality: 0.9, Freshness: 1,
+			ID:                  "specialized",
+			WorkflowID:          "fix_bug",
+			Capabilities:        []string{"filesystem.read"},
+			TaskTypes:           []TaskType{TaskBugFix},
+			Languages:           []string{"go"},
+			Frameworks:          []string{"net/http"},
+			RepositoryTags:      []string{"router"},
+			PolicyAllowed:       true,
+			Enabled:             true,
+			Available:           true,
+			HistoricalSuccess:   0.9,
+			VerificationSuccess: 0.9,
+			SourceTrust:         1,
+			Quality:             0.9,
+			Freshness:           1,
 		},
 	}
 
@@ -110,7 +120,7 @@ func TestProfilerClassifiesCommonCodingTasks(t *testing.T) {
 	profiler := NewProfiler()
 	cases := []struct {
 		input string
-		want TaskType
+		want  TaskType
 	}{
 		{"Fix timeout in router", TaskBugFix},
 		{"Implement OAuth login", TaskFeature},

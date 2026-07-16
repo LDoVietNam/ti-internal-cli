@@ -1,0 +1,181 @@
+name: agent-review-automerge
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+  issue_comment:
+    types: [created, edited, deleted]
+  check_suite:
+    types: [completed]
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: read
+  statuses: write
+
+concurrency:
+  group: agent-review-automerge-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  gate-and-merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const policy = JSON.parse(fs.readFileSync('.github/agent-review-policy.json', 'utf8'));
+            const { owner, repo } = context.repo;
+
+            async function resolvePRNumbers() {
+              const event = context.payload;
+              if (event.pull_request) return [event.pull_request.number];
+              if (event.issue?.pull_request) return [event.issue.number];
+              if (event.check_suite?.pull_requests?.length) return event.check_suite.pull_requests.map(p => p.number);
+              if (event.workflow_run?.pull_requests?.length) return event.workflow_run.pull_requests.map(p => p.number);
+              const prs = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 });
+              return prs.map(p => p.number);
+            }
+
+            function normalize(login) {
+              return (login || '').toLowerCase();
+            }
+
+            function isReviewer(login) {
+              return policy.reviewers.map(normalize).includes(normalize(login));
+            }
+
+            function hasBlockingSeverity(body) {
+              const text = body || '';
+              return policy.blocking_thread_severities.some(level => new RegExp(`(^|\\s)${level}:`, 'i').test(text));
+            }
+
+            async function unresolvedThreads(number) {
+              const query = `query($owner:String!, $repo:String!, $number:Int!, $cursor:String) {
+                repository(owner:$owner, name:$repo) {
+                  pullRequest(number:$number) {
+                    reviewThreads(first:100, after:$cursor) {
+                      nodes { isResolved comments(first:20) { nodes { body author { login } } } }
+                      pageInfo { hasNextPage endCursor }
+                    }
+                  }
+                }
+              }`;
+              let cursor = null;
+              const nodes = [];
+              do {
+                const data = await github.graphql(query, { owner, repo, number, cursor });
+                const page = data.repository.pullRequest.reviewThreads;
+                nodes.push(...page.nodes);
+                cursor = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
+              } while (cursor);
+              return nodes.filter(thread => !thread.isResolved && thread.comments.nodes.some(c => isReviewer(c.author?.login) && hasBlockingSeverity(c.body)));
+            }
+
+            async function evaluate(number) {
+              const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+              if (pr.state !== 'open' || pr.draft) return;
+
+              const internalPR = pr.head.repo?.full_name === `${owner}/${repo}`;
+              const labels = pr.labels.map(label => label.name);
+              const optedOut = labels.includes(policy.opt_out_label);
+
+              const [reviews, issueComments, reviewComments, checks, blockers] = await Promise.all([
+                github.paginate(github.rest.pulls.listReviews, { owner, repo, pull_number: number, per_page: 100 }),
+                github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: number, per_page: 100 }),
+                github.paginate(github.rest.pulls.listReviewComments, { owner, repo, pull_number: number, per_page: 100 }),
+                github.paginate(github.rest.checks.listForRef, { owner, repo, ref: pr.head.sha, per_page: 100 }),
+                unresolvedThreads(number),
+              ]);
+
+              const evidence = new Map(policy.reviewers.map(login => [normalize(login), { login, seen: false, blocked: false }]));
+              for (const review of reviews) {
+                const key = normalize(review.user?.login);
+                if (!evidence.has(key)) continue;
+                const item = evidence.get(key);
+                item.seen = true;
+                if (review.state === 'CHANGES_REQUESTED') item.blocked = true;
+              }
+              for (const comment of [...issueComments, ...reviewComments]) {
+                const key = normalize(comment.user?.login);
+                if (!evidence.has(key)) continue;
+                const body = comment.body || '';
+                const item = evidence.get(key);
+                if (/review skipped|review limit reached|rate limited/i.test(body)) continue;
+                item.seen = true;
+                if (hasBlockingSeverity(body)) item.blocked = true;
+              }
+              for (const run of checks) {
+                const keyText = `${run.name} ${run.app?.slug || ''}`.toLowerCase();
+                for (const [key, item] of evidence) {
+                  const token = key.replace('[bot]', '').split('-')[0];
+                  if (keyText.includes(token) && run.conclusion === 'success') item.seen = true;
+                }
+              }
+
+              const positive = [...evidence.values()].filter(item => item.seen && !item.blocked).length;
+              const requiredPatterns = policy.required_ci_name_patterns.map(value => new RegExp(value, 'i'));
+              const ciRuns = checks.filter(run => requiredPatterns.some(pattern => pattern.test(run.name)) && !/agent-review/i.test(run.name));
+              const ciGreen = ciRuns.length > 0 && ciRuns.every(run => run.status === 'completed' && ['success', 'neutral', 'skipped'].includes(run.conclusion));
+              const reviewerGate = positive >= policy.minimum_positive_reviewers && blockers.length === 0;
+              const mergeAllowed = internalPR && !optedOut && ciGreen && reviewerGate;
+
+              const state = mergeAllowed ? 'success' : (ciRuns.some(run => ['failure', 'cancelled', 'timed_out', 'action_required'].includes(run.conclusion)) ? 'failure' : 'pending');
+              const description = mergeAllowed
+                ? `CI green; ${positive}/${policy.reviewers.length} reviewer signals; no blockers`
+                : `CI=${ciGreen}; reviewers=${positive}/${policy.minimum_positive_reviewers}; blockers=${blockers.length}`;
+
+              await github.rest.repos.createCommitStatus({
+                owner, repo, sha: pr.head.sha, state,
+                context: 'agent-review-gate',
+                description: description.slice(0, 140),
+                target_url: pr.html_url,
+              });
+
+              const marker = '<!-- agent-review-gate -->';
+              const body = `${marker}\n## Agent review gate\n\n- CI green: **${ciGreen}**\n- Positive reviewer signals: **${positive}/${policy.reviewers.length}** (minimum ${policy.minimum_positive_reviewers})\n- Unresolved P0/P1/P2 bot threads: **${blockers.length}**\n- Internal PR: **${internalPR}**\n- Opted out with \`${policy.opt_out_label}\`: **${optedOut}**\n\nResult: **${mergeAllowed ? 'ready to auto-merge' : 'blocked/pending'}**`;
+              const existing = issueComments.find(comment => comment.user?.type === 'Bot' && (comment.body || '').includes(marker));
+              if (existing) {
+                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+              } else {
+                await github.rest.issues.createComment({ owner, repo, issue_number: number, body });
+              }
+
+              if (!mergeAllowed) return;
+              const refreshed = await github.rest.pulls.get({ owner, repo, pull_number: number });
+              if (!refreshed.data.mergeable || ['dirty', 'blocked'].includes(refreshed.data.mergeable_state)) return;
+              await github.rest.pulls.merge({
+                owner, repo, pull_number: number,
+                merge_method: policy.merge_method,
+                sha: pr.head.sha,
+                commit_title: `${pr.title} (#${number})`,
+                commit_message: `Merged automatically after CI and agent reviewer gate passed.`,
+              });
+            }
+
+            const numbers = [...new Set(await resolvePRNumbers())];
+            for (const number of numbers) {
+              try {
+                await evaluate(number);
+              } catch (error) {
+                core.warning(`PR #${number}: ${error.message}`);
+              }
+            }

@@ -28,7 +28,7 @@ type TaskProfile struct {
 type Request struct {
 	Task                 TaskProfile
 	RequiredCapabilities []string
-	MinimumSourceTrust    float64
+	MinimumSourceTrust   float64
 }
 
 type Candidate struct {

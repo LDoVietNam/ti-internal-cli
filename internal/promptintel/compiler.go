@@ -28,9 +28,9 @@ type Section struct {
 }
 
 type Provenance struct {
-	SkillID   string
-	Source     string
-	SourceURL  string
+	SkillID     string
+	Source      string
+	SourceURL   string
 	ContentHash string
 }
 

@@ -75,7 +75,7 @@ func (r *Resolver) Resolve(profile Profile) (SkillStack, error) {
 			continue
 		}
 		score, reasons := scoreSkill(profile, skill)
-		if score > 0 {
+		if hasContextMatch(reasons) {
 			selections = append(selections, SkillSelection{Skill: skill, Score: score, Reasons: reasons})
 		}
 	}
@@ -117,13 +117,10 @@ func (r *Resolver) Resolve(profile Profile) (SkillStack, error) {
 	}
 
 	fallback := false
-	for len(selected) < minimum {
+	if len(selected) < minimum {
 		fallback = true
 		skill := r.registry.Fallback()
 		add(SkillSelection{Skill: skill, Score: 0, Reasons: []SkillReason{{Factor: "generic_fallback", Score: 1}}})
-		if len(selected) < minimum {
-			break
-		}
 	}
 	if len(selected) == 0 {
 		fallback = true
@@ -156,6 +153,18 @@ func scoreSkill(profile Profile, skill docsbot.Skill) (float64, []SkillReason) {
 		total += factors[i].Score * weights[i]
 	}
 	return total, factors
+}
+
+func hasContextMatch(reasons []SkillReason) bool {
+	for _, reason := range reasons {
+		switch reason.Factor {
+		case "domain_match", "task_type_match", "language_match", "framework_match", "phase_match", "repository_match":
+			if reason.Score > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func overlapOne(value string, values []string) float64 {
